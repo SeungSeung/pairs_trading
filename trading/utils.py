@@ -138,8 +138,8 @@ def future_close_position(ticker,amount,binance_futures):
     )
     return order
 
-def futures_short(ticker,amount,binance_futures):
-    binance_futures.set_leverage(2,symbol=ticker,params={"marginMode":"isolated"})
+def futures_short(ticker,amount,binance_futures,lev=2):
+    binance_futures.set_leverage(lev,symbol=ticker,params={"marginMode":"isolated"})
     #binance_futures.set_margin_mode(marginType='isolated', symbol = ticker, params={})
     order=binance_futures.create_market_sell_order(
         symbol=ticker,
