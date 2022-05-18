@@ -10,7 +10,7 @@ from math import ceil
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import coint
 import statsmodels.api as sm
-from trading.utils import *
+from utils import *
 binance_futures= ccxt.binance(config={
     'apiKey': 'apiKey', 
     'secret': 'secret',
@@ -30,7 +30,7 @@ binance = ccxt.binance(config={
 })
 
 """
-pair trading을 해야하므로 우리는 각 코인 및 선물의 가격 데이터를 가져온 후 공적분 검증을 해봐야한다. 
+pair trading을 해야하므로 우리는 각 코인 및 선물의 가격 데이터를 가져온 후 공적분 검정을 해봐야한다. 
 
 """
 
@@ -69,6 +69,7 @@ while True:
     # 맨 윗줄 날리기~
     coin_panel_minute = coin_panel_minute.iloc[2:]
     future_panel_minute = future_panel_minute.iloc[2:]
+
     now=datetime.datetime.now()
     if (now.hour==9) or (now.hour==13) or (now.hour==17):
         if flag==1:
@@ -76,7 +77,8 @@ while True:
                 funding[ticker]=get_funding_rate(binance_futures,ticker=ticker)
             flag=0
     if (now.hour==8) or (now.hour==12) or (now.hour==16):
-        flag=1 
+        if flag==0:
+            flag=1 
     #####공적분 검정######
     #coin_scaled,future_scaled=mm_scaler(coin_panel_minute),mm_scaler(future_panel_minute)
     
@@ -144,8 +146,8 @@ while True:
                     print(f'청산 티커: {ticker}')
                 except Exception as e:
                     print(e, ticker)
-
+    time.sleep(150)
     coin_panel_minute=get_coin_panel(binance=binance,tickers=tickers)
     future_panel_minute=get_future_panel(binance_futures=binance_futures,tickers=tickers)
     tickers=get_tickers(binance=binance,binance_futures=binance_futures)
-    time.sleep(300)
+    time.sleep(250)
