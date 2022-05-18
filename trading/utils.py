@@ -11,6 +11,26 @@ from statsmodels.tsa.stattools import coint
 import statsmodels.api as sm
 
 
+def get_tickers(binance,binance_futures):
+    future_tickers=[]
+    future_markets=binance_futures.load_markets()
+    for m in future_markets:
+        if m[-4:]=='USDT':
+            future_tickers.append(m)
+
+    coin_tickers=[]
+    markets= binance.load_markets()
+    for c in markets:
+        if c[-4:]=='USDT':
+            coin_tickers.append(c)
+    future_tickers=set(future_tickers)
+    coin_tickers=set(coin_tickers)
+    tickers=future_tickers.intersection(coin_tickers)
+    return tickers
+
+
+
+
 ####future price panel###
 def get_future_panel(binance_futures,tickers):
     btc_ohlcv  = binance_futures.fetch_ohlcv("BTC/USDT", timeframe='1m')
@@ -35,7 +55,7 @@ def get_future_panel(binance_futures,tickers):
 ####coin price panel###
 
 def get_coin_panel(binance,tickers):
-    btc_ohlcv = binance.fetch_ohlcv("BTC/USDT", timeframe='1h')
+    btc_ohlcv = binance.fetch_ohlcv("BTC/USDT", timeframe='1m')
 
     df2 = pd.DataFrame(btc_ohlcv, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
     df2['datetime'] = pd.to_datetime(df2['datetime'],unit='ms')
@@ -44,13 +64,13 @@ def get_coin_panel(binance,tickers):
 
     coin_panel_minute=pd.DataFrame(index=df2.index,columns=tickers)
     for ticker in tqdm(tickers):
-        ohlcv=binance.fetch_ohlcv(ticker, timeframe='1h')
-        df1 = pd.DataFrame(ohlcv, columns=['datetime', 'open', 'high', 'low', 'close','volume'])
-        df1['datetime'] = pd.to_datetime(df1['datetime'],unit='ms')
-        df1.set_index('datetime', inplace=True)
-        df1=df1['close'].copy()
-        if len(df1)==500:
-            coin_panel_minute[ticker]=df1.values
+        ohlcv=binance.fetch_ohlcv(ticker, timeframe='1m')
+        df3 = pd.DataFrame(ohlcv, columns=['datetime', 'open', 'high', 'low', 'close','volume'])
+        df3['datetime'] = pd.to_datetime(df3['datetime'],unit='ms')
+        df3.set_index('datetime', inplace=True)
+        df3=df3['close'].copy()
+        if len(df3)==500:
+            coin_panel_minute[ticker]=df3.values
         else:
             coin_panel_minute[ticker]=np.nan
     return coin_panel_minute
@@ -158,4 +178,29 @@ def f_balance(binance,a='USDT'):
     return balance[a]
 
 
+"""
+def futures_short(ticker,amount,binance_futures):
+    binance_futures.create_market_sell_order(
+        symbol=ticker,
+        amount=amount)
 
+def spot_long(ticker,amount,binance):
+    binance.create_market_buy_order(
+        symbol=ticker,
+        amount=amount)
+    
+def spot_long_close(ticker,amount,binance):
+    binance.create_market_sell_order(
+        symbol=ticker,
+        amount=amount)
+def future_close_position(ticker,amount,binance_futures):
+    binance_futures.create_market_buy_order(
+        symbol=ticker,amount=amount
+    )
+"""
+
+
+
+
+if __name__ =='__main__':
+    print('no, this file is not for trading')
