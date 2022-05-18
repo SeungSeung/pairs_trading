@@ -57,7 +57,8 @@ coin_panel_minute=coin_panel_minute.apply(lambda x : x.fillna(method='ffill'))
 
 ###########################################trading!#####################
 
-
+max_account=100000
+min_account=100
 funding_target=0
 funding=dict()
 
@@ -66,6 +67,10 @@ for ticker in tickers:
 
 flag=1
 while True:
+    balance = binance.fetch_balance()
+    balance_futures=binance_futures.fetch_balance()
+    if (balance['USDT']['total']+balance_futures['USDT']['total']<max_account) or (balance['USDT']['total']+balance_futures['USDT']['total']<min_account):
+        break
     # 맨 윗줄 날리기~
     coin_panel_minute = coin_panel_minute.iloc[2:]
     future_panel_minute = future_panel_minute.iloc[2:]
@@ -92,9 +97,8 @@ while True:
     future_pair=dict()
     beta_dict=dict()
     print('매수를 시작합니다.\n')
+    time.sleep(20)
     for ticker in tqdm(tickers):
-        balance = binance.fetch_balance()
-        balance_futures=binance_futures.fetch_balance()
         if (balance['USDT']['free']>30) and (balance_futures['USDT']['free']>30):
             if E_Gtest(coin_panel_minute[ticker],future_panel_minute[ticker])<-2.58:
                 beta=get_beta(coin_panel_minute[ticker].values,future_panel_minute[ticker].values)
@@ -104,14 +108,17 @@ while True:
                 beta_dict[ticker]=beta
 
                 if (get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]>threshold1) and (funding[ticker]>funding_target):
-                    if (balance['USDT']['free']>get_futures_price(binance_futures=binance_futures,ticker=ticker)) and (balance_futures['USDT']['free']>get_spot_price(binance=binance,ticker=ticker)):
+                    if (balance['USDT']['free']>get_spot_price(binance_futures=binance_futures,ticker=ticker)) and (balance_futures['USDT']['free']>get_futures_price(binance=binance,ticker=ticker)):
                         try:
+                            print('-'*70)
+                            print(f'포지션 진입 ticker:{ticker}')
                             c_amount=coin_amount(ticker=ticker,binance=binance,beta=beta)
                             order_spot=spot_long(binance=binance,ticker=ticker,amount=c_amount)
                             pprint(order_spot)
                             f_amount=future_amount(binance_futures=binance_futures,ticker=ticker)
                             short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount)
                             pprint(short)
+                            print('-'*70)
                             beta_dict[ticker]=beta
                             if ticker not in coin_pair.keys():
                                 coin_pair[ticker]=c_amount
@@ -127,7 +134,7 @@ while True:
                         
                     time.sleep(1)
     
-    
+    time.sleep(30)
     ###청산
     buy_tickers=list(coin_pair.keys())
     if len(buy_tickers)!=0:
@@ -135,19 +142,41 @@ while True:
         for ticker in tqdm(buy_tickers):
             if get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]<=0 or funding[ticker]<=0:
                 try:
+                    print(f'청산 티커: {ticker}')
                     close_short=future_close_position(binance_futures=binance_futures,ticker=ticker,amount=future_pair[ticker])
                     pprint(close_short)
                     close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker])
                     pprint(close_spot)
+                    print('-'*70)
                     del buy_tickers[buy_tickers.index(ticker)]
                     coin_pair.pop(ticker)
                     future_pair.pop(ticker)
                     beta.pop(ticker)
-                    print(f'청산 티커: {ticker}')
                 except Exception as e:
                     print(e, ticker)
     time.sleep(150)
+    tickers=get_tickers(binance=binance,binance_futures=binance_futures)
     coin_panel_minute=get_coin_panel(binance=binance,tickers=tickers)
     future_panel_minute=get_future_panel(binance_futures=binance_futures,tickers=tickers)
-    tickers=get_tickers(binance=binance,binance_futures=binance_futures)
     time.sleep(250)
+
+####계좌 잔고에 따른 조건이 만족되었을 때 거래를 종료하고 모든 포지션을 청산한다#######
+print('-'*70)
+print('자동매매 종료\n')
+print('포지션 전부 청산 시작\n')
+print('*'*70)
+for ticker in tqdm(buy_tickers):
+    try:
+        print(f'청산 티커: {ticker}')
+        close_short=future_close_position(binance_futures=binance_futures,ticker=ticker,amount=future_pair[ticker])
+        pprint(close_short)
+        close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker])
+        pprint(close_spot)
+        time.sleep(1)
+    except Exception as e:
+        print(e, ticker)
+print('*'*70)
+f_total=balance_futures['USDT']['total']
+c_total=balance['USDT']['total']
+print(f'선물계좌 총액: {f_total}')
+print(f'현물계좌 총액: {c_total}')
