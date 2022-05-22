@@ -12,8 +12,8 @@ from statsmodels.tsa.stattools import coint
 import statsmodels.api as sm
 from utils import *
 binance_futures= ccxt.binance(config={
-    'apiKey': 'apiKey', 
-    'secret': 'secret',
+    'apiKey': '5KgzZl5yEKnr5c1OyKnhgr6sH0JmBkODGkj7ZYvwPgXsrLQ9FDPgUkRNvH09dTJv', 
+    'secret': 'Fv58Dj7H9DCgg1otaQWYiMIR5lBCt1jK679klLDi5ibgnzSJldi0vhX5sSEK619d',
     'enableRateLimit': True,
     'options': {
         'defaultType': 'future'
@@ -24,8 +24,8 @@ binance_futures= ccxt.binance(config={
 
 
 binance = ccxt.binance(config={
-    'apiKey': 'apiKey',
-    'secret': 'secret',
+    'apiKey': '5KgzZl5yEKnr5c1OyKnhgr6sH0JmBkODGkj7ZYvwPgXsrLQ9FDPgUkRNvH09dTJv',
+    'secret': 'Fv58Dj7H9DCgg1otaQWYiMIR5lBCt1jK679klLDi5ibgnzSJldi0vhX5sSEK619d',
     'enableRateLimit': True,
 })
 
@@ -69,7 +69,7 @@ flag=1
 while True:
     balance = binance.fetch_balance()
     balance_futures=binance_futures.fetch_balance()
-    if (balance['USDT']['total']+balance_futures['USDT']['total']<max_account) or (balance['USDT']['total']+balance_futures['USDT']['total']<min_account):
+    if (balance['USDT']['total']+balance_futures['USDT']['total']>max_account) or (balance['USDT']['total']+balance_futures['USDT']['total']<min_account):
         break
     # 맨 윗줄 날리기~
     coin_panel_minute = coin_panel_minute.iloc[2:]
@@ -110,7 +110,7 @@ while True:
                 if (get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]>threshold1) and (funding[ticker]>funding_target):
                     if (balance['USDT']['free']>get_spot_price(binance_futures=binance_futures,ticker=ticker)) and (balance_futures['USDT']['free']>get_futures_price(binance=binance,ticker=ticker)):
                         try:
-                            print('-'*70)
+                            print('-'*120)
                             print(f'포지션 진입 ticker:{ticker}')
                             c_amount=coin_amount(ticker=ticker,binance=binance,beta=beta)
                             order_spot=spot_long(binance=binance,ticker=ticker,amount=c_amount)
@@ -118,7 +118,7 @@ while True:
                             f_amount=future_amount(binance_futures=binance_futures,ticker=ticker)
                             short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount)
                             pprint(short)
-                            print('-'*70)
+                            print('-'*120)
                             beta_dict[ticker]=beta
                             if ticker not in coin_pair.keys():
                                 coin_pair[ticker]=c_amount
@@ -134,7 +134,7 @@ while True:
                         
                     time.sleep(1)
     
-    time.sleep(30)
+    time.sleep(15)
     ###청산
     buy_tickers=list(coin_pair.keys())
     if len(buy_tickers)!=0:
@@ -147,24 +147,24 @@ while True:
                     pprint(close_short)
                     close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker])
                     pprint(close_spot)
-                    print('-'*70)
+                    print('-'*120)
                     del buy_tickers[buy_tickers.index(ticker)]
                     coin_pair.pop(ticker)
                     future_pair.pop(ticker)
                     beta.pop(ticker)
                 except Exception as e:
                     print(e, ticker)
-    time.sleep(150)
+    time.sleep(100)
     tickers=get_tickers(binance=binance,binance_futures=binance_futures)
     coin_panel_minute=get_coin_panel(binance=binance,tickers=tickers)
     future_panel_minute=get_future_panel(binance_futures=binance_futures,tickers=tickers)
-    time.sleep(250)
+    time.sleep(150)
 
 ####계좌 잔고에 따른 조건이 만족되었을 때 거래를 종료하고 모든 포지션을 청산한다#######
-print('-'*70)
+print('-'*120)
 print('자동매매 종료\n')
 print('포지션 전부 청산 시작\n')
-print('*'*70)
+print('*'*120)
 for ticker in tqdm(buy_tickers):
     try:
         print(f'청산 티커: {ticker}')
@@ -175,7 +175,7 @@ for ticker in tqdm(buy_tickers):
         time.sleep(1)
     except Exception as e:
         print(e, ticker)
-print('*'*70)
+print('*'*120)
 f_total=balance_futures['USDT']['total']
 c_total=balance['USDT']['total']
 print(f'선물계좌 총액: {f_total}')
