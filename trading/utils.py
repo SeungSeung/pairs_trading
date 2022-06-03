@@ -9,7 +9,7 @@ from math import ceil
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import coint
 import statsmodels.api as sm
-
+from arch.unitroot import DFGLS
 
 def get_tickers(binance,binance_futures):
     future_tickers=[]
@@ -101,6 +101,18 @@ def get_spread(y,x):
     return spread
 
 
+
+def danger(y,x):
+    risk=get_spread(y,x).values
+    
+    return risk.std()
+
+def get_velo(spread):
+    v=DFGLS(spread).regression.params['Level.L1']
+    return -np.log(1/2)/v
+
+
+
 def find_distance(a,b):
     dist=np.linalg.norm(a-b)
     return dist
@@ -119,12 +131,25 @@ def get_spot_price(binance,ticker):
     spot_price = binance.fetch_ticker(ticker)
     return spot_price['last']
 ####determine coin and future amount###
-def coin_amount(binance,ticker,beta):
-    return int(ceil(20.0/float(get_spot_price(binance,ticker))*beta))
+def coin_amount(binance,ticker,beta,velo_ticker,velo_dict):
+    if velo_ticker.index(velo_dict[ticker])<10:
+        return int(45.0/float(get_spot_price(binance,ticker))*beta)
+    else:
+        return int(20.0/float(get_spot_price(binance,ticker))*beta)
 
-def future_amount(binance_futures,ticker):
-    return int(ceil(20.0/float(get_futures_price(binance_futures,ticker))))
-
+def future_amount(binance_futures,ticker,velo_ticker,velo_dict):
+    if velo_ticker.index(velo_dict[ticker])<10:
+        return int(45.0/float(get_futures_price(binance_futures,ticker)))
+    else:
+        return int(20.0/float(get_futures_price(binance_futures,ticker)))
+def leverage(velo_ticker,ticker,velo_dict):
+    num=velo_ticker.index(velo_dict[ticker])
+    if num<10:
+        return 10
+    elif (num>10) and (num<100):
+        return 5
+    else:
+        return 2
 
 
 ####get funding rate###
