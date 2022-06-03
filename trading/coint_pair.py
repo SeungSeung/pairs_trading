@@ -10,8 +10,9 @@ from math import ceil
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import coint
 import statsmodels.api as sm
-from utils import *
+from arch.unitroot import DFGLS
 import os
+
 
 apiKey = os.environ['apiKey']
 secret = os.environ['secret']
@@ -66,19 +67,23 @@ max_account=100000
 min_account=100
 funding_target=0
 funding=dict()
-
+velo_dict=dict()
+coin_panel_minute = coin_panel_minute.iloc[2:]
+future_panel_minute = future_panel_minute.iloc[2:]
 for ticker in tickers:
     funding[ticker]=get_funding_rate(binance_futures,ticker=ticker)
+    velo_dict[ticker]=get_velo(get_spread(future_panel_minute[ticker].values,coin_panel_minute[ticker].values))
 
 flag=1
 while True:
+    velo_ticker=sorted(list(velo_dict.values()))
     balance = binance.fetch_balance()
     balance_futures=binance_futures.fetch_balance()
     if (balance['USDT']['total']+balance_futures['USDT']['total']>max_account) or (balance['USDT']['total']+balance_futures['USDT']['total']<min_account):
         break
     # 맨 윗줄 날리기~
-    coin_panel_minute = coin_panel_minute.iloc[2:]
-    future_panel_minute = future_panel_minute.iloc[2:]
+    coin_panel_minute = coin_panel_minute.iloc[10:]
+    future_panel_minute = future_panel_minute.iloc[10:]
 
     now=datetime.datetime.now()
     if (now.hour==9) or (now.hour==13) or (now.hour==17):
@@ -108,20 +113,24 @@ while True:
             if E_Gtest(coin_panel_minute[ticker],future_panel_minute[ticker])<-2.58:
                 beta=get_beta(coin_panel_minute[ticker].values,future_panel_minute[ticker].values)
                 spread=get_spread(coin_panel_minute[ticker].values,future_panel_minute[ticker].values)
+                ###속도를 구해보자#####
+                velo=get_velo(spread)
                 threshold1=spread.std()*s+spread.mean()
                 threshold2=spread.std()*-s+spread.mean()
                 beta_dict[ticker]=beta
 
                 if (get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]>threshold1) and (funding[ticker]>funding_target):
-                    if (balance['USDT']['free']>get_spot_price(binance_futures=binance_futures,ticker=ticker)) and (balance_futures['USDT']['free']>get_futures_price(binance=binance,ticker=ticker)):
+                    if (balance['USDT']['free']>get_spot_price(binance=binance,ticker=ticker)) and (balance_futures['USDT']['free']>get_futures_price(binance_futures=binance_futures,ticker=ticker)):
                         try:
                             print('-'*120)
                             print(f'포지션 진입 ticker:{ticker}')
                             c_amount=coin_amount(ticker=ticker,binance=binance,beta=beta)
                             order_spot=spot_long(binance=binance,ticker=ticker,amount=c_amount)
                             pprint(order_spot)
-                            f_amount=future_amount(binance_futures=binance_futures,ticker=ticker)
-                            short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount)
+                            print('-'*120)
+                            f_amount=future_amount(binance_futures=binance_futures,ticker=ticker,velo_ticker=velo_ticker,velo_dict=velo_dict)
+                            flev=leverage(velo_ticker=velo_ticker,velo_dict=velo_dict,ticker=ticker)
+                            short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount,lev=flev)
                             pprint(short)
                             print('-'*120)
                             beta_dict[ticker]=beta
@@ -150,6 +159,7 @@ while True:
                     print(f'청산 티커: {ticker}')
                     close_short=future_close_position(binance_futures=binance_futures,ticker=ticker,amount=future_pair[ticker])
                     pprint(close_short)
+                    print('-'*120)
                     close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker])
                     pprint(close_spot)
                     print('-'*120)
@@ -159,11 +169,16 @@ while True:
                     beta.pop(ticker)
                 except Exception as e:
                     print(e, ticker)
-    time.sleep(150)
+    time.sleep(100)
     tickers=get_tickers(binance=binance,binance_futures=binance_futures)
     coin_panel_minute=get_coin_panel(binance=binance,tickers=tickers)
     future_panel_minute=get_future_panel(binance_futures=binance_futures,tickers=tickers)
-    time.sleep(250)
+    velo_dict=dict()
+    for ticker in tickers:
+        velo_dict[ticker]=get_velo(get_spread(future_panel_minute[ticker].values,coin_panel_minute[ticker].values))
+    coin_panel_minute = coin_panel_minute.iloc[2:]
+    future_panel_minute = future_panel_minute.iloc[2:]
+    time.sleep(200)
 
 ####계좌 잔고에 따른 조건이 만족되었을 때 거래를 종료하고 모든 포지션을 청산한다#######
 print('-'*120)
