@@ -109,7 +109,7 @@ def danger(y,x):
 
 def get_velo(spread):
     v=DFGLS(spread).regression.params['Level.L1']
-    return -np.log(1/2)/v
+    return -np.log(2)/v
 
 
 
@@ -142,11 +142,12 @@ def future_amount(binance_futures,ticker,velo_ticker,velo_dict):
         return int(45.0/float(get_futures_price(binance_futures,ticker)))
     else:
         return int(20.0/float(get_futures_price(binance_futures,ticker)))
+###determine leverage
 def leverage(velo_ticker,ticker,velo_dict):
     num=velo_ticker.index(velo_dict[ticker])
     if num<10:
         return 10
-    elif (num>10) and (num<100):
+    elif (num>10) and (num<50):
         return 5
     else:
         return 2
