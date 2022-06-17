@@ -1,3 +1,4 @@
+import secrets
 import pandas as pd
 import numpy as np
 import ccxt
@@ -28,6 +29,7 @@ ray를 이용하여 수정할것: 일단 기존의 과정을 하지말고  전�
 그 후로 pair에 해당하는 것을 trading -> 다시 pair selection. Pair selection 함수 안에 binance나 binance_futures 객체가 있으면 안될듯. 
 
 """
+
 
 binance_futures= ccxt.binance(config={
     'apiKey': apiKey, 
@@ -73,7 +75,7 @@ coin_panel_minute=coin_panel_minute.apply(lambda x : x.fillna(method='ffill'))
 # 맨 윗줄 날리기~
 #coin_panel_minute = coin_panel_minute.iloc[2:]
 
-###병렬처리####
+###pair_selection 병렬처리####
 @ray.remote
 def pair_selection(ticker,y=future_panel_minute,x=coin_panel_minute):
     y,x=y[ticker].values,x[ticker].values
@@ -108,7 +110,7 @@ while True:
 
 
 
-    time.sleep(20)
+    time.sleep(10)
     velo_ticker=sorted(list(velo_dict.values()))
     balance = binance.fetch_balance()
     balance_futures=binance_futures.fetch_balance()
@@ -167,12 +169,14 @@ while True:
                             print(f'포지션 진입 ticker:{ticker}')
                             c_amount=coin_amount(ticker=ticker,binance=binance,beta=beta,velo_dict=velo_dict,velo_ticker=velo_ticker)
                             order_spot=spot_long(binance=binance,ticker=ticker,amount=c_amount)
+                            c_amount=order_spot['amount']
                             print('현물 매수')
                             pprint(order_spot)
                             print('-'*120)
                             f_amount=future_amount(binance_futures=binance_futures,ticker=ticker,velo_ticker=velo_ticker,velo_dict=velo_dict)
                             flev=leverage(velo_ticker=velo_ticker,velo_dict=velo_dict,ticker=ticker)
                             short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount,lev=flev)
+                            f_amount=short['amount']
                             print('선물 숏')
                             pprint(short)
                             print('-'*120)
@@ -205,14 +209,14 @@ while True:
                     pprint(close_short)
                     print('-'*120)
                     c_price=get_spot_price(binance=binance,ticker=ticker)
-                    close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker],price=c_price)
+                    close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker])
                     print('현물 청산')
                     pprint(close_spot)
                     print('-'*120)
                     del buy_tickers[buy_tickers.index(ticker)]
                     coin_pair.pop(ticker)
                     future_pair.pop(ticker)
-                    beta.pop(ticker)
+                    beta_dict.pop(ticker)
                 except Exception as e:
                     print(e, ticker)
     time.sleep(20)
@@ -237,7 +241,7 @@ for ticker in tqdm(buy_tickers):
         close_short=future_close_position(binance_futures=binance_futures,ticker=ticker,amount=future_pair[ticker])
         pprint(close_short)
         c_price=get_spot_price(binance=binance,ticker=ticker)
-        close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker],price=c_price)
+        close_spot=spot_long_close(binance=binance,ticker=ticker,amount=coin_pair[ticker])
         pprint(close_spot)
         time.sleep(1)
     except Exception as e:

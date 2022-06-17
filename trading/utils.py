@@ -5,26 +5,17 @@ import datetime
 import time
 
 from tqdm import tqdm
-from math import ceil
+from math import ceil,trunc
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import coint
 import statsmodels.api as sm
 from arch.unitroot import DFGLS
 
 def get_tickers(binance,binance_futures):
-    future_tickers=[]
     future_markets=binance_futures.load_markets()
-    for m in future_markets:
-        if m[-4:]=='USDT':
-            future_tickers.append(m)
-
-    coin_tickers=[]
+    future_tickers=set([m for m in future_markets if m[-4:]=='USDT'])
     markets= binance.load_markets()
-    for c in markets:
-        if c[-4:]=='USDT':
-            coin_tickers.append(c)
-    future_tickers=set(future_tickers)
-    coin_tickers=set(coin_tickers)
+    coin_tickers=set([c for c in markets if c[-4:]=='USDT'])
     tickers=future_tickers.intersection(coin_tickers)
     return tickers
 
@@ -133,15 +124,15 @@ def get_spot_price(binance,ticker):
 ####determine coin and future amount###
 def coin_amount(binance,ticker,beta,velo_ticker,velo_dict):
     if velo_ticker.index(velo_dict[ticker])<10:
-        return int(45.0/float(get_spot_price(binance,ticker))*beta)
+        return trunc(15.0/float(get_spot_price(binance,ticker))*beta)
     else:
-        return int(20.0/float(get_spot_price(binance,ticker))*beta)
+        return trunc(11.0/float(get_spot_price(binance,ticker))*beta)
 
 def future_amount(binance_futures,ticker,velo_ticker,velo_dict):
     if velo_ticker.index(velo_dict[ticker])<10:
-        return int(45.0/float(get_futures_price(binance_futures,ticker)))
+        return trunc(15.0/float(get_futures_price(binance_futures,ticker)))
     else:
-        return int(20.0/float(get_futures_price(binance_futures,ticker)))
+        return trunc(11.0/float(get_futures_price(binance_futures,ticker)))
 ###determine leverage
 def leverage(velo_ticker,ticker,velo_dict):
     num=velo_ticker.index(velo_dict[ticker])
@@ -160,6 +151,30 @@ def get_funding_rate(binance_futures,ticker):
     return fund['interestRate']
 
 
+def position_in(binance,binance_futures,ticker,c_amount,f_amount,lev):
+    order1=binance.create_market_buy_order(
+        symbol=ticker,
+        amount=c_amount)
+    binance_futures.set_leverage(lev,symbol=ticker,params={"marginMode":"isolated"})
+    #binance_futures.set_margin_mode(marginType='isolated', symbol = ticker, params={})
+    order2=binance_futures.create_market_sell_order(
+        symbol=ticker,
+        amount=f_amount)
+    return (order1,order2)
+
+
+
+
+def close_postion(binance,binance_futures,ticker,c_amount,f_amount):
+    order1=binance.create_market_sell_order(
+        symbol=ticker,
+        amount=c_amount)
+    order2=binance_futures.create_market_buy_order(
+        symbol=ticker,amount=f_amount,
+
+    )
+    return (order1,order2)
+    
 
 ####excution function####
 def spot_long(ticker,amount,binance):
