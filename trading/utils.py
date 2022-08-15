@@ -24,7 +24,7 @@ def get_tickers(binance,binance_futures):
 
 ####future price panel###
 def get_future_panel(binance_futures,tickers):
-    btc_ohlcv  = binance_futures.fetch_ohlcv("BTC/USDT", timeframe='1m')
+    btc_ohlcv  = binance_futures.fetch_ohlcv("BTC/USDT", timeframe='1h')
 
     df = pd.DataFrame(btc_ohlcv, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
     df['datetime'] = pd.to_datetime(df['datetime'],unit='ms')
@@ -32,7 +32,7 @@ def get_future_panel(binance_futures,tickers):
 
     future_panel_minute=pd.DataFrame(index=df.index,columns=tickers)
     for ticker in tqdm(tickers):
-        ohlcv=binance_futures.fetch_ohlcv(ticker, timeframe='1m')
+        ohlcv=binance_futures.fetch_ohlcv(ticker, timeframe='1h')
         df1 = pd.DataFrame(ohlcv, columns=['datetime', 'open', 'high', 'low', 'close','volume'])
         df1['datetime'] = pd.to_datetime(df1['datetime'],unit='ms')
         df1.set_index('datetime', inplace=True)
@@ -46,7 +46,7 @@ def get_future_panel(binance_futures,tickers):
 ####coin price panel###
 
 def get_coin_panel(binance,tickers):
-    btc_ohlcv = binance.fetch_ohlcv("BTC/USDT", timeframe='1m')
+    btc_ohlcv = binance.fetch_ohlcv("BTC/USDT", timeframe='1h')
 
     df2 = pd.DataFrame(btc_ohlcv, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
     df2['datetime'] = pd.to_datetime(df2['datetime'],unit='ms')
@@ -55,7 +55,7 @@ def get_coin_panel(binance,tickers):
 
     coin_panel_minute=pd.DataFrame(index=df2.index,columns=tickers)
     for ticker in tqdm(tickers):
-        ohlcv=binance.fetch_ohlcv(ticker, timeframe='1m')
+        ohlcv=binance.fetch_ohlcv(ticker, timeframe='1h')
         df3 = pd.DataFrame(ohlcv, columns=['datetime', 'open', 'high', 'low', 'close','volume'])
         df3['datetime'] = pd.to_datetime(df3['datetime'],unit='ms')
         df3.set_index('datetime', inplace=True)
@@ -102,7 +102,12 @@ def get_velo(spread):
     v=DFGLS(spread).regression.params['Level.L1']
     return -np.log(2)/v
 
-
+def zero_passing(spread):
+    spread_sign=np.sign(np.log(spread/spread.shift(1)))
+    zero_pass=0
+    for i in range(1,len(spread_sign)):
+        if spread_sign.iloc[i] != spread_sign[i-1]:
+            zero_pass+=1
 
 def find_distance(a,b):
     dist=np.linalg.norm(a-b)
@@ -122,26 +127,30 @@ def get_spot_price(binance,ticker):
     spot_price = binance.fetch_ticker(ticker)
     return spot_price['last']
 ####determine coin and future amount###
-def coin_amount(binance,ticker,beta,velo_ticker,velo_dict):
-    if velo_ticker.index(velo_dict[ticker])<10:
-        return trunc(15.0/float(get_spot_price(binance,ticker))*beta)
+def coin_amount(binance,ticker,beta,velo_ticker,velo_dict,zero_ticker,zero_dict):
+    if velo_ticker.index(velo_dict[ticker]) or zero_ticker.index(zero_dict[ticker])<10:
+        return trunc(25.0/float(get_spot_price(binance,ticker))*beta)
     else:
-        return trunc(11.0/float(get_spot_price(binance,ticker))*beta)
+        return trunc(20.0/float(get_spot_price(binance,ticker))*beta)
 
-def future_amount(binance_futures,ticker,velo_ticker,velo_dict):
-    if velo_ticker.index(velo_dict[ticker])<10:
-        return trunc(15.0/float(get_futures_price(binance_futures,ticker)))
+
+
+
+def future_amount(binance_futures,ticker,velo_ticker,velo_dict,zero_ticker,zero_dict):
+    if velo_ticker.index(velo_dict[ticker]) or zero_ticker.index(zero_dict[ticker])<10:
+        return trunc(25.0/float(get_futures_price(binance_futures,ticker)))
     else:
-        return trunc(11.0/float(get_futures_price(binance_futures,ticker)))
+        return trunc(20.0/float(get_futures_price(binance_futures,ticker)))
 ###determine leverage
-def leverage(velo_ticker,ticker,velo_dict):
-    num=velo_ticker.index(velo_dict[ticker])
-    if num<10:
+def leverage(velo_ticker,ticker,velo_dict,zero_ticker,zero_dict):
+    num_velo=velo_ticker.index(velo_dict[ticker])
+    num_zero=zero_ticker.index(zero_dict[ticker])
+    if num_velo<20 and num_zero<20:
+        return 20
+    elif (num_velo>20 and num_zero>20) and (num_velo<50 and num_zero<50):
         return 10
-    elif (num>10) and (num<50):
-        return 5
     else:
-        return 2
+        return 5
 
 
 ####get funding rate###
@@ -199,10 +208,11 @@ def future_close_position(ticker,amount,binance_futures):
     )
     return order
 
-def futures_short(ticker,amount,binance_futures,lev=2):
+def futures_short(ticker,amount,binance_futures,price,lev=5):
     binance_futures.set_leverage(lev,symbol=ticker,params={"marginMode":"isolated"})
     #binance_futures.set_margin_mode(marginType='isolated', symbol = ticker, params={})
-    order=binance_futures.create_market_sell_order(
+    order=binance_futures.create_limit_sell_order(
+        price=price,
         symbol=ticker,
         amount=amount)
     return order
