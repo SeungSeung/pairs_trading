@@ -46,5 +46,9 @@ def pair_selection(ticker,y=future_panel_minute,x=coin_panel_minute):
 </code>
 </pre>
 
+    5)zero passing
+        a) 공적분 검정을 통과한 spread는 white noise 이므로 zero passing(즉 spread가 0을 단위 시간동안 얼마나 통과하는지) 개념을 도입
+        
+        b) zero passing이 클 수록 단위시간당 그만큼 많이 회귀한다는 것이므로 수익을 볼 가능성이 큼 -> 비교적 큰 레버리지, 큰 포지션
 
 
