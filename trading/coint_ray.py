@@ -4,7 +4,7 @@ import numpy as np
 import ccxt
 import datetime
 import time
-from torch import threshold
+
 
 from tqdm import tqdm
 from pprint import pprint
@@ -20,8 +20,10 @@ import logging
 import warnings
 
 warnings.filterwarnings('ignore')
+
 apiKey = os.environ['apiKey']
 secret = os.environ['secret']
+
 
 """
 
@@ -49,10 +51,12 @@ binance = ccxt.binance(config={
     'enableRateLimit': True,
 })
 
+
 """
 pair trading을 해야하므로 우리는 각 코인 및 선물의 가격 데이터를 가져온 후 공적분 검정을 해봐야한다. 
 
 """
+
 
 #1 각 시장의 ticker를 가져온다
 tickers=get_tickers(binance=binance,binance_futures=binance_futures)
@@ -84,34 +88,40 @@ def pair_selection(ticker,y=future_panel_minute,x=coin_panel_minute):
         beta=results.params[0]
         spread=results.resid
         spread=pd.Series(spread,name='spread')
+        spread_sign=np.sign(np.log(spread/spread.shift(1)))
+        zero_passing=0
+        for i in range(1,len(spread_sign)):
+            if spread_sign.iloc[i] != spread_sign.iloc[i-1]:
+                zero_passing+=1
         velo=-np.log(2)/DFGLS(spread).regression.params['Level.L1']
         threshold=spread.std()*2+spread.mean()
-        return (ticker,beta,spread,velo,threshold)
+        return (ticker,beta,spread,velo,threshold,zero_passing)
 
 ###########################################trading!#####################
 
-max_account=100000
+max_account=1000
 min_account=100
 funding_target=0
 funding=dict()
 velo_dict=dict()
+zero_dict=dict()
 coin_panel_minute = coin_panel_minute.iloc[2:]
 future_panel_minute = future_panel_minute.iloc[2:]
 for ticker in tickers:
     funding[ticker]=get_funding_rate(binance_futures,ticker=ticker)
     velo_dict[ticker]=get_velo(get_spread(future_panel_minute[ticker].values,coin_panel_minute[ticker].values))
+    zero_dict[ticker]=zero_passing(get_spread(future_panel_minute[ticker].values,coin_panel_minute[ticker].values))
+
 
 flag=1
+future_pair=dict()
+coin_pair=dict()
+beta_dict=dict()
 while True:
     ray.init(ignore_reinit_error=True,logging_level=logging.ERROR)
-
-
-
-
-
-
     time.sleep(10)
     velo_ticker=sorted(list(velo_dict.values()))
+    zero_ticker=sorted(list(zero_dict.values()),reverse=True)
     balance = binance.fetch_balance()
     balance_futures=binance_futures.fetch_balance()
     f_total=balance_futures['USDT']['total']
@@ -142,9 +152,7 @@ while True:
 
   ###진입
     #buy_tickers=[]
-    coin_pair=dict()
     s=2
-    future_pair=dict()
     beta_dict=dict()
     print('매수를 시작합니다.\n')
     time.sleep(10)
@@ -160,38 +168,38 @@ while True:
             beta,threshold=bnd[1],bnd[4]
             beta_dict[ticker]=beta
             if (balance['USDT']['free']>100) and (balance_futures['USDT']['free']>100):
-                
-
                 if (get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]>threshold) and (funding[ticker]>funding_target):
                     if (balance['USDT']['free']>get_spot_price(binance=binance,ticker=ticker)) and (balance_futures['USDT']['free']>get_futures_price(binance_futures=binance_futures,ticker=ticker)):
-                        try:
-                            print('-'*120)
-                            print(f'포지션 진입 ticker:{ticker}')
-                            c_amount=coin_amount(ticker=ticker,binance=binance,beta=beta,velo_dict=velo_dict,velo_ticker=velo_ticker)
-                            order_spot=spot_long(binance=binance,ticker=ticker,amount=c_amount)
-                            c_amount=order_spot['amount']
-                            print('현물 매수')
-                            pprint(order_spot)
-                            print('-'*120)
-                            f_amount=future_amount(binance_futures=binance_futures,ticker=ticker,velo_ticker=velo_ticker,velo_dict=velo_dict)
-                            flev=leverage(velo_ticker=velo_ticker,velo_dict=velo_dict,ticker=ticker)
-                            short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount,lev=flev)
-                            f_amount=short['amount']
-                            print('선물 숏')
-                            pprint(short)
-                            print('-'*120)
-                            
-                            if ticker not in coin_pair.keys():
-                                coin_pair[ticker]=c_amount
-                                future_pair[ticker]=f_amount
-                            else:
-                                coin_pair[ticker]+=c_amount
-                                future_pair[ticker]+=f_amount
-                            print(f'매수 티커: {ticker}')
-                            time.sleep(1)
-                        except Exception as e:
-                            print(f'매수 티커: {ticker} ' + str(e))
-                            #buy_tickers.append(ticker)
+                        if np.sign(beta_dict[ticker])>0:
+                            try:
+                                print('-'*120)
+                                print(f'포지션 진입 ticker:{ticker}')
+                                c_amount=coin_amount(ticker=ticker,binance=binance,beta=beta,velo_dict=velo_dict,velo_ticker=velo_ticker,zero_ticker=zero_ticker,zero_dict=zero_dict)
+                                order_spot=spot_long(binance=binance,ticker=ticker,amount=c_amount)
+                                c_amount=order_spot['amount']
+                                print('현물 매수')
+                                pprint(order_spot)
+                                print('-'*120)
+                                f_amount=future_amount(binance_futures=binance_futures,ticker=ticker,velo_ticker=velo_ticker,velo_dict=velo_dict,zero_ticker=zero_ticker,zero_dict=zero_dict)
+                                flev=leverage(velo_ticker=velo_ticker,velo_dict=velo_dict,ticker=ticker,zero_ticker=zero_ticker,zero_dict=zero_dict)
+                                short=futures_short(binance_futures=binance_futures,ticker=ticker,amount=f_amount,price=get_futures_price(binance_futures=binance_futures,ticker=ticker),lev=flev)
+                                f_amount=short['amount']
+                                print('선물 숏')
+                                pprint(short)
+                                print('-'*120)
+                                time.sleep(1)
+                                
+                                if ticker not in coin_pair.keys():
+                                    coin_pair[ticker]=c_amount
+                                    future_pair[ticker]=f_amount
+                                else:
+                                    coin_pair[ticker]+=c_amount
+                                    future_pair[ticker]+=f_amount
+                                print(f'매수 티커: {ticker}')
+                                time.sleep(1)
+                            except Exception as e:
+                                print(f'매수 티커: {ticker} ' + str(e))
+                                #buy_tickers.append(ticker)
 
                   
     
@@ -201,7 +209,7 @@ while True:
     if len(buy_tickers)!=0:
         print('청산 조건에 맞는지 검증합니다\n')
         for ticker in tqdm(buy_tickers):
-            if get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]<=0 or funding[ticker]<=0:
+            if get_futures_price(binance_futures=binance_futures,ticker=ticker)-get_spot_price(binance=binance,ticker=ticker)*beta_dict[ticker]<=0 or funding[ticker]<0:
                 try:
                     print(f'청산 티커: {ticker}')
                     close_short=future_close_position(binance_futures=binance_futures,ticker=ticker,amount=future_pair[ticker])
@@ -224,8 +232,10 @@ while True:
     coin_panel_minute=get_coin_panel(binance=binance,tickers=tickers)
     future_panel_minute=get_future_panel(binance_futures=binance_futures,tickers=tickers)
     velo_dict=dict()
+    zero_dict=dict()
     for ticker in tickers:
         velo_dict[ticker]=get_velo(get_spread(future_panel_minute[ticker].values,coin_panel_minute[ticker].values))
+        zero_dict[ticker]=zero_passing(get_spread(future_panel_minute[ticker].values,coin_panel_minute[ticker].values))
     coin_panel_minute = coin_panel_minute.iloc[2:]
     future_panel_minute = future_panel_minute.iloc[2:]
     
