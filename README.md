@@ -32,6 +32,7 @@ backtesting은 각각 distance approach와 cointegration approach를 해봄.
         a)대략 139개의 티커를 이용하여 pair selection을 하는 과정을 ray를 이용하여 병렬로 처리
 <pre>
 <code>
+
 @ray.remote
 def pair_selection(ticker,y=future_panel_minute,x=coin_panel_minute):
     y,x=y[ticker].values,x[ticker].values
