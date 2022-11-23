@@ -52,3 +52,4 @@ def pair_selection(ticker,y=future_panel_minute,x=coin_panel_minute):
         b) zero passing이 클 수록 단위시간당 그만큼 많이 회귀한다는 것이므로 수익을 볼 가능성이 큼 -> 비교적 큰 레버리지, 큰 포지션
 
 
+
